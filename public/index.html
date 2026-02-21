@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DisCloud Drive</title>
+    <style>
+        body { font-family: sans-serif; background: #23272a; color: white; display: flex; flex-direction: column; align-items: center; }
+        .card { background: #2c2f33; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); margin-top: 50px; }
+        input { margin: 10px 0; }
+        button { background: #5865F2; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Discord Cloud Storage</h1>
+        <form action="/upload" method="post" enctype="multipart/form-data">
+            <input type="file" name="file"><br>
+            <button type="submit">Hochladen & Zerstückeln</button>
+        </form>
+    </div>
+</body>
+</html>
