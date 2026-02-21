@@ -14,36 +14,32 @@ const client = new Client({
 });
 
 const app = express();
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '2gb' })); // Verhindert "Entity too large"
 app.use(express.static('public'));
 
 const upload = multer({ dest: 'temp/' });
 const DB_PATH = path.join(__dirname, 'drive_db.json');
 
-// Datenbank initialisieren
 let driveData = { files: [], folders: [] };
 if (fs.existsSync(DB_PATH)) {
-    try { driveData = fs.readJsonSync(DB_PATH); } catch (e) { console.log("DB leer"); }
+    try { driveData = fs.readJsonSync(DB_PATH); } catch (e) { driveData = { files: [], folders: [] }; }
 }
 
-async function saveDB() {
-    await fs.writeJson(DB_PATH, driveData);
-}
+async function saveDB() { await fs.writeJson(DB_PATH, driveData); }
 
-// API: Alle Daten holen
+// Route: Alle Daten laden
 app.get('/api/data', (req, res) => res.json(driveData));
 
-// API: Ordner erstellen (Discord Channel)
+// Route: Ordner erstellen (Discord Channel)
 app.post('/api/folders', async (req, res) => {
     const { name } = req.body;
+    if (!name) return res.status(400).json({ error: "Kein Name" });
+
     try {
         const guild = await client.guilds.fetch(GUILD_ID);
         const channel = await guild.channels.create({
-            name: name.toLowerCase().replace(/ /g, '-'),
-            type: ChannelType.GuildText,
-            permissionOverwrites: [
-                { id: guild.id, allow: [PermissionsBitField.Flags.ViewChannel] }
-            ]
+            name: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+            type: ChannelType.GuildText
         });
         
         const newFolder = { id: channel.id, name: name };
@@ -51,54 +47,49 @@ app.post('/api/folders', async (req, res) => {
         await saveDB();
         res.json(newFolder);
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Konnte Channel nicht erstellen. Bot-Rechte prüfen!" });
+        res.status(500).json({ error: "Bot fehlen Rechte: 'Manage Channels'" });
     }
 });
 
-// API: Upload
+// Route: Upload
 app.post('/upload', upload.single('file'), async (req, res) => {
     const { folderId } = req.body;
-    const file = req.file;
-    if (!file) return res.status(400).send("Keine Datei.");
+    if (!req.file || !folderId) return res.status(400).send("Datei oder Ordner fehlt.");
 
     try {
         const channel = await client.channels.fetch(folderId);
-        const buffer = await fs.readFile(file.path);
-        const CHUNK_SIZE = 24 * 1024 * 1024; // ~24MB (Discord Limit)
+        const buffer = await fs.readFile(req.file.path);
+        const CHUNK_SIZE = 24 * 1024 * 1024; // 24MB
         const parts = [];
 
         for (let i = 0; i < buffer.length; i += CHUNK_SIZE) {
             const chunk = buffer.slice(i, i + CHUNK_SIZE);
-            const attachment = new AttachmentBuilder(chunk, { name: `${file.originalname}.p${i}` });
-            const msg = await channel.send({ content: `Datei-Chunk für ${file.originalname}`, files: [attachment] });
+            const attachment = new AttachmentBuilder(chunk, { name: `${req.file.originalname}.part${i}` });
+            const msg = await channel.send({ files: [attachment] });
             parts.push(msg.attachments.first().url);
         }
 
-        driveData.files.push({ name: file.originalname, folderId, parts, size: file.size });
+        driveData.files.push({ name: req.file.originalname, folderId, parts });
         await saveDB();
-        await fs.remove(file.path);
-        res.send("Upload erfolgreich!");
+        await fs.remove(req.file.path);
+        res.json({ success: true });
     } catch (err) {
-        res.status(500).send("Fehler: " + err.message);
+        res.status(500).send(err.message);
     }
 });
 
-// API: Download
+// Route: Download
 app.get('/download', async (req, res) => {
     const file = driveData.files.find(f => f.name === req.query.name);
-    if (!file) return res.status(404).send("Datei nicht gefunden.");
+    if (!file) return res.status(404).send("Nicht gefunden.");
 
-    try {
-        res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
-        for (const url of file.parts) {
-            const response = await axios.get(url, { responseType: 'arraybuffer' });
-            res.write(Buffer.from(response.data));
-        }
-        res.end();
-    } catch (e) { res.status(500).send("Download-Fehler."); }
+    res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+    for (const url of file.parts) {
+        const response = await axios.get(url, { responseType: 'arraybuffer' });
+        res.write(Buffer.from(response.data));
+    }
+    res.end();
 });
 
-client.once('ready', () => console.log("Bot ist online!"));
 client.login(TOKEN);
-app.listen(PORT);
+app.listen(PORT, () => console.log("System Online"));
