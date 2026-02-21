@@ -1,21 +1,72 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>DisCloud Drive</title>
+    <title>Discord Drive</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; background: #23272a; color: white; display: flex; flex-direction: column; align-items: center; }
-        .card { background: #2c2f33; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); margin-top: 50px; }
-        input { margin: 10px 0; }
-        button { background: #5865F2; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; background: #fff; }
+        .sidebar { width: 240px; padding: 20px; border-right: 1px solid #ddd; height: 100vh; }
+        .main { flex: 1; padding: 20px; background: #f8f9fa; }
+        .btn-new { padding: 12px 24px; border-radius: 30px; border: 1px solid #ddd; background: white; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); font-weight: bold; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+        .item { background: white; border: 1px solid #ddd; border-radius: 10px; padding: 15px; text-align: center; cursor: pointer; }
+        .item:hover { background: #e8f0fe; }
+        .item i { font-size: 48px; color: #5f6368; display: block; margin-bottom: 10px; }
+        .folder i { color: #fabb05; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>Discord Cloud Storage</h1>
-        <form action="/upload" method="post" enctype="multipart/form-data">
-            <input type="file" name="file"><br>
-            <button type="submit">Hochladen & Zerstückeln</button>
+    <div class="sidebar">
+        <button class="btn-new" onclick="createFolder()">＋ Neuer Ordner</button>
+        <button class="btn-new" onclick="document.getElementById('fileUp').click()">＋ Upload</button>
+        <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data" style="display:none">
+            <input type="file" id="fileUp" name="file" onchange="submitUpload()">
+            <input type="hidden" id="currentFolderId" name="folderId" value="">
         </form>
     </div>
+    <div class="main">
+        <h2>Meine Ablage</h2>
+        <div class="grid" id="content"></div>
+    </div>
+
+    <script>
+        let currentFolder = "";
+
+        async function load() {
+            const res = await fetch('/api/data');
+            const data = await res.json();
+            const cont = document.getElementById('content');
+            cont.innerHTML = '';
+
+            data.folders.forEach(f => {
+                cont.innerHTML += `<div class="item folder" onclick="selectFolder('${f.id}')"><i class="material-icons">folder</i>${f.name}</div>`;
+            });
+
+            data.files.filter(f => f.folderId === currentFolder).forEach(f => {
+                cont.innerHTML += `<div class="item" onclick="location.href='/download?name=${f.name}'"><i class="material-icons">description</i>${f.name}</div>`;
+            });
+        }
+
+        async function createFolder() {
+            const name = prompt("Ordnername:");
+            if (name) {
+                await fetch('/api/folders', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name })
+                });
+                load();
+            }
+        }
+
+        function selectFolder(id) {
+            currentFolder = id;
+            document.getElementById('currentFolderId').value = id;
+            load();
+        }
+
+        function submitUpload() { document.getElementById('uploadForm').submit(); }
+        load();
+    </script>
 </body>
 </html>
