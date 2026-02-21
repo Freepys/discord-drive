@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ChannelType, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, AttachmentBuilder, PermissionsBitField } = require('discord.js');
 const express = require('express');
 const multer = require('multer');
 const fs = require('fs-extra');
@@ -6,7 +6,7 @@ const path = require('path');
 const axios = require('axios');
 
 const TOKEN = process.env.TOKEN;
-const GUILD_ID = process.env.GUILD_ID; // Dein Server-ID
+const GUILD_ID = process.env.GUILD_ID;
 const PORT = process.env.PORT || 8080;
 
 const client = new Client({ 
@@ -14,79 +14,91 @@ const client = new Client({
 });
 
 const app = express();
-// Erhöht das Limit für große Uploads
-app.use(express.json({ limit: '10gb' }));
-app.use(express.urlencoded({ limit: '10gb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
 const upload = multer({ dest: 'temp/' });
-const DB_PATH = './drive_db.json';
+const DB_PATH = path.join(__dirname, 'drive_db.json');
+
+// Datenbank initialisieren
 let driveData = { files: [], folders: [] };
+if (fs.existsSync(DB_PATH)) {
+    try { driveData = fs.readJsonSync(DB_PATH); } catch (e) { console.log("DB leer"); }
+}
 
-if (fs.existsSync(DB_PATH)) driveData = fs.readJsonSync(DB_PATH);
+async function saveDB() {
+    await fs.writeJson(DB_PATH, driveData);
+}
 
-// --- DRIVE LOGIK ---
+// API: Alle Daten holen
+app.get('/api/data', (req, res) => res.json(driveData));
 
-// Ordner erstellen = Discord Channel erstellen
+// API: Ordner erstellen (Discord Channel)
 app.post('/api/folders', async (req, res) => {
     const { name } = req.body;
     try {
         const guild = await client.guilds.fetch(GUILD_ID);
         const channel = await guild.channels.create({
-            name: name,
+            name: name.toLowerCase().replace(/ /g, '-'),
             type: ChannelType.GuildText,
+            permissionOverwrites: [
+                { id: guild.id, allow: [PermissionsBitField.Flags.ViewChannel] }
+            ]
         });
         
         const newFolder = { id: channel.id, name: name };
         driveData.folders.push(newFolder);
-        await fs.writeJson(DB_PATH, driveData);
+        await saveDB();
         res.json(newFolder);
     } catch (err) {
-        res.status(500).send(err.message);
+        console.error(err);
+        res.status(500).json({ error: "Konnte Channel nicht erstellen. Bot-Rechte prüfen!" });
     }
 });
 
-// Upload in spezifischen Ordner (Channel)
+// API: Upload
 app.post('/upload', upload.single('file'), async (req, res) => {
     const { folderId } = req.body;
     const file = req.file;
     if (!file) return res.status(400).send("Keine Datei.");
 
     try {
-        const channel = await client.channels.fetch(folderId || process.env.DEFAULT_CHANNEL);
+        const channel = await client.channels.fetch(folderId);
         const buffer = await fs.readFile(file.path);
-        const CHUNK_SIZE = 20 * 1024 * 1024; // 20MB
+        const CHUNK_SIZE = 24 * 1024 * 1024; // ~24MB (Discord Limit)
         const parts = [];
 
         for (let i = 0; i < buffer.length; i += CHUNK_SIZE) {
             const chunk = buffer.slice(i, i + CHUNK_SIZE);
             const attachment = new AttachmentBuilder(chunk, { name: `${file.originalname}.p${i}` });
-            const msg = await channel.send({ files: [attachment] });
+            const msg = await channel.send({ content: `Datei-Chunk für ${file.originalname}`, files: [attachment] });
             parts.push(msg.attachments.first().url);
         }
 
-        driveData.files.push({ name: file.originalname, folderId, parts });
-        await fs.writeJson(DB_PATH, driveData);
+        driveData.files.push({ name: file.originalname, folderId, parts, size: file.size });
+        await saveDB();
         await fs.remove(file.path);
-        res.redirect('/');
+        res.send("Upload erfolgreich!");
     } catch (err) {
-        res.status(500).send(err.message);
+        res.status(500).send("Fehler: " + err.message);
     }
 });
 
-app.get('/api/data', (req, res) => res.json(driveData));
-
+// API: Download
 app.get('/download', async (req, res) => {
     const file = driveData.files.find(f => f.name === req.query.name);
     if (!file) return res.status(404).send("Datei nicht gefunden.");
 
-    res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
-    for (const url of file.parts) {
-        const response = await axios.get(url, { responseType: 'arraybuffer' });
-        res.write(Buffer.from(response.data));
-    }
-    res.end();
+    try {
+        res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+        for (const url of file.parts) {
+            const response = await axios.get(url, { responseType: 'arraybuffer' });
+            res.write(Buffer.from(response.data));
+        }
+        res.end();
+    } catch (e) { res.status(500).send("Download-Fehler."); }
 });
 
+client.once('ready', () => console.log("Bot ist online!"));
 client.login(TOKEN);
-app.listen(PORT, () => console.log(`Drive bereit auf Port ${PORT}`));
+app.listen(PORT);
