@@ -2,133 +2,116 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>My Discord Drive</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <title>Cloud Drive</title>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
     <style>
-        body { font-family: 'Roboto', sans-serif; margin: 0; display: flex; height: 100vh; background: #fff; overflow: hidden; }
-        /* Sidebar */
-        .sidebar { width: 250px; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #e0e0e0; }
-        .new-btn { width: 120px; height: 48px; border-radius: 24px; border: none; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; font-size: 14px; margin-bottom: 20px; }
-        .new-btn:hover { background: #f1f3f4; }
-        .nav-item { display: flex; align-items: center; gap: 15px; padding: 10px 20px; border-radius: 0 20px 20px 0; cursor: pointer; color: #3c4043; }
-        .nav-item.active { background: #e8f0fe; color: #1967d2; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; display: flex; height: 100vh; background: #fff; }
+        .sidebar { width: 260px; padding: 20px; border-right: 1px solid #dadce0; }
+        .main { flex: 1; display: flex; flex-direction: column; background: #f8f9fa; }
+        .toolbar { padding: 10px 20px; background: #fff; display: flex; gap: 10px; border-bottom: 1px solid #dadce0; align-items: center; }
         
-        /* Main Area */
-        .main { flex: 1; display: flex; flex-direction: column; }
-        .header { height: 60px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; padding: 0 20px; justify-content: space-between; }
-        .content { flex: 1; padding: 20px; overflow-y: auto; }
+        .btn { border: none; background: #fff; border-radius: 24px; padding: 8px 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; border: 1px solid #dadce0; font-size: 14px; }
+        .btn:hover { background: #f1f3f4; }
+        .btn-primary { background: #1a73e8; color: #fff; border: none; }
+        .btn-primary:hover { background: #1765cc; }
+
+        input[type="text"] { border: 1px solid #dadce0; border-radius: 4px; padding: 6px 12px; outline: none; }
         
-        /* Grid Layout */
-        .section-title { font-size: 14px; color: #5f6368; margin: 20px 0 10px; font-weight: 500; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .content { padding: 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+        .item { background: #fff; border: 1px solid #dadce0; border-radius: 12px; padding: 16px; text-align: center; transition: 0.2s; cursor: pointer; }
+        .item:hover { box-shadow: 0 1px 3px rgba(60,64,67,0.3); }
+        .item i { font-size: 48px; color: #5f6368; display: block; margin-bottom: 8px; }
+        .item.folder i { color: #fabb05; }
+        .active-folder { border: 2px solid #1a73e8; }
         
-        .card { border: 1px solid #dadce0; border-radius: 8px; padding: 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
-        .card:hover { background: #f1f3f4; }
-        .card i { font-size: 24px; }
-        .folder-icon { color: #5f6368; }
-        .file-icon { color: #4285f4; }
-        
-        /* Modal Style Upload */
-        #status { position: fixed; bottom: 20px; right: 20px; background: #323232; color: #fff; padding: 10px 20px; border-radius: 4px; display: none; }
+        #loader { position: fixed; bottom: 20px; right: 20px; background: #323232; color: #fff; padding: 12px 24px; border-radius: 8px; display: none; }
     </style>
 </head>
 <body>
+
     <div class="sidebar">
-        <button class="new-btn" onclick="openMenu()"><i class="material-icons-outlined">add</i> Neu</button>
-        <div class="nav-item active"><i class="material-icons-outlined">folder_shared</i> Meine Ablage</div>
-        <div class="nav-item"><i class="material-icons-outlined">people_outline</i> Für mich freigegeben</div>
-    </div>
-    <div class="main">
-        <div class="header">
-            <input type="text" placeholder="In Drive suchen" style="width: 60%; padding: 10px; border: none; background: #f1f3f4; border-radius: 8px;">
-            <i class="material-icons-outlined">account_circle</i>
-        </div>
-        <div class="content">
-            <div id="folder-section">
-                <div class="section-title">Ordner</div>
-                <div class="grid" id="folder-grid"></div>
-            </div>
-            <div id="file-section">
-                <div class="section-title">Dateien</div>
-                <div class="grid" id="file-grid"></div>
-            </div>
+        <h2 style="color: #5f6368; font-weight: 400;">Drive</h2>
+        <div style="margin-top: 20px; color: #1a73e8; display: flex; align-items: center; gap: 12px;">
+            <i class="material-icons-outlined">folder</i> Meine Ablage
         </div>
     </div>
 
-    <div id="status">Upload läuft...</div>
+    <div class="main">
+        <div class="toolbar">
+            <input type="text" id="newFolderName" placeholder="Neuer Ordner Name...">
+            <button class="btn" onclick="createFolder()"><i class="material-icons-outlined">create_new_folder</i> Erstellen</button>
+            <div style="width: 1px; height: 24px; background: #dadce0; margin: 0 10px;"></div>
+            <input type="file" id="fileInput" style="display:none" onchange="uploadFile()">
+            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()"><i class="material-icons-outlined">upload</i> Hochladen</button>
+        </div>
+
+        <div class="content" id="view">
+            </div>
+    </div>
+
+    <div id="loader">Aktion wird ausgeführt...</div>
 
     <script>
-        let currentFolderId = null;
+        let selectedFolder = null;
 
-        async function loadData() {
+        async function refresh() {
             const res = await fetch('/api/data');
             const data = await res.json();
-            
-            const folderGrid = document.getElementById('folder-grid');
-            const fileGrid = document.getElementById('file-grid');
-            folderGrid.innerHTML = '';
-            fileGrid.innerHTML = '';
+            const view = document.getElementById('view');
+            view.innerHTML = '';
 
+            // Ordner anzeigen
             data.folders.forEach(f => {
-                folderGrid.innerHTML += `
-                    <div class="card" onclick="selectFolder('${f.id}')">
-                        <i class="material-icons-outlined folder-icon">folder</i>
-                        <span>${f.name}</span>
-                    </div>`;
+                const div = document.createElement('div');
+                div.className = `item folder ${selectedFolder === f.id ? 'active-folder' : ''}`;
+                div.onclick = () => { selectedFolder = f.id; refresh(); };
+                div.innerHTML = `<i class="material-icons-outlined">folder</i><span>${f.name}</span>`;
+                view.appendChild(div);
             });
 
-            data.files.filter(f => f.folderId === currentFolderId).forEach(f => {
-                fileGrid.innerHTML += `
-                    <div class="card" onclick="downloadFile('${f.name}')">
-                        <i class="material-icons-outlined file-icon">insert_drive_file</i>
-                        <span>${f.name}</span>
-                    </div>`;
-            });
-        }
-
-        async function openMenu() {
-            const action = prompt("Was möchtest du tun? (1) Neuer Ordner, (2) Datei hochladen");
-            if (action === "1") {
-                const name = prompt("Ordnername:");
-                if(name) {
-                    await fetch('/api/folders', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ name })
-                    });
-                    loadData();
-                }
-            } else if (action === "2") {
-                if(!currentFolderId) return alert("Bitte wähle erst einen Ordner aus!");
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.onchange = e => uploadFile(e.target.files[0]);
-                input.click();
+            // Dateien des ausgewählten Ordners anzeigen
+            if (selectedFolder) {
+                data.files.filter(file => file.folderId === selectedFolder).forEach(file => {
+                    const div = document.createElement('div');
+                    div.className = 'item';
+                    div.onclick = () => window.location.href = `/download?name=${file.name}`;
+                    div.innerHTML = `<i class="material-icons-outlined">description</i><span>${file.name}</span>`;
+                    view.appendChild(div);
+                });
             }
         }
 
-        async function uploadFile(file) {
+        async function createFolder() {
+            const name = document.getElementById('newFolderName').value;
+            if (!name) return alert("Bitte Name eingeben");
+            
+            showLoader(true);
+            await fetch('/api/folders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            document.getElementById('newFolderName').value = '';
+            showLoader(false);
+            refresh();
+        }
+
+        async function uploadFile() {
+            if (!selectedFolder) return alert("Wähle erst einen Ordner aus (anklicken)!");
+            const file = document.getElementById('fileInput').files[0];
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('folderId', currentFolderId);
+            formData.append('folderId', selectedFolder);
 
-            document.getElementById('status').style.display = 'block';
+            showLoader(true);
             await fetch('/upload', { method: 'POST', body: formData });
-            document.getElementById('status').style.display = 'none';
-            loadData();
+            showLoader(false);
+            refresh();
         }
 
-        function selectFolder(id) {
-            currentFolderId = id;
-            loadData();
-        }
-
-        function downloadFile(name) {
-            window.location.href = `/download?name=${encodeURIComponent(name)}`;
-        }
-
-        loadData();
+        function showLoader(show) { document.getElementById('loader').style.display = show ? 'block' : 'none'; }
+        
+        refresh();
     </script>
 </body>
 </html>
